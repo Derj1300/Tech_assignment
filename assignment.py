@@ -9,6 +9,6 @@ def main():
     df['day_sinlastloan'] = df.apply(lambda row: f.calc_day_sinlastloan(row["contracts"]), axis=1)
 
     print(df)
-    df.to_csv("./output.csv")
+    df.to_csv("./contract_features.csv")
 
 main()
