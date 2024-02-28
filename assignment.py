@@ -8,7 +8,6 @@ def main():
     df['disb_active_bank_loan_wo_tbc'] = df.apply(lambda row: f.calc_disb_active_bank_loan(row["contracts"]), axis=1)
     df['day_sinlastloan'] = df.apply(lambda row: f.calc_day_sinlastloan(row["contracts"]), axis=1)
 
-    print(df)
     df.to_csv("./contract_features.csv")
 
 main()
