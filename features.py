@@ -1,7 +1,7 @@
 import pandas as pd
 import json
 
-def _skip_to_monday(initial_date, day_of_week):
+def _replace_to_application_date(initial_date, application_date, day_of_week):
     result = initial_date
     if(day_of_week == 5):
         result += pd.DateOffset(days=2)
@@ -16,11 +16,13 @@ def _replace_to_zero_if_empty_string(value):
     else:
         return value
 
-def calc_tot_claim(json_str):
+def calc_tot_claim(json_str, application_date):
     if (pd.isnull(json_str)):
         return -3
     else:
         current_ts = pd.to_datetime('today').normalize()
+        #application_date = pd.to_datetime(application_date.split().str[0], format='%Y-%m-%d')
+        application_date = pd.to_datetime(application_date).date()
         
         # transform json column into new df
         json_obj = json.loads(json_str)
@@ -39,7 +41,7 @@ def calc_tot_claim(json_str):
         claim_df['day_of_week'] = claim_df['claim_date'].dt.dayofweek
 
         # set claim_date as a date of the next Monday if claim was created on Saturday or Sunday
-        claim_df['claim_date'] = claim_df.apply(lambda row: _skip_to_monday(row["claim_date"], row["day_of_week"]), axis=1)
+        claim_df['claim_date'] = claim_df.apply(lambda row: _replace_to_application_date(row["claim_date"], application_date, row["day_of_week"]), axis=1)
 
         # filter out records older than 180 days
         claim_df = claim_df.loc[(claim_df['claim_date'] >= (current_ts - pd.DateOffset(days=180))) & (claim_df['claim_date'] <= current_ts)]
@@ -55,16 +57,16 @@ def calc_disb_active_bank_loan(json_str):
         json_obj = json.loads(json_str)
         claim_df = pd.json_normalize(json_obj)
 
-        # remove records without loans
-        claim_df = claim_df[claim_df['summa'].astype(bool)] 
+        # get records with not null summa field
+        non_empty_summa_df = claim_df[claim_df['summa'].astype(bool)] 
 
-        #check if there are any loans
-        if(len(claim_df.index) == 0):
-            return -1
-        
         # remove records with empty claim_date
         claim_df = claim_df[claim_df['claim_date'].astype(bool)] 
 
+        # check if there are any loans
+        if(len(non_empty_summa_df.index) == 0 or len(claim_df.index) == 0):
+            return -1
+        
         # fill bank column gaps and remove records with TBC loans
         claim_df['bank'] = claim_df.apply(lambda row: row.get('bank', ''), axis=1)
         claim_df = claim_df[~claim_df.get('bank', '').isin(['LIZ', 'LOM', 'MKO', 'SUG', ''])]
@@ -74,22 +76,26 @@ def calc_disb_active_bank_loan(json_str):
 
         return int(claim_df['loan_summa_fixed'].sum())
 
-def calc_day_sinlastloan(json_str):
+def calc_day_sinlastloan(json_str, application_date):
 
     if (pd.isnull(json_str)):
         return -3
     else:
         current_ts = pd.to_datetime('today').normalize()
+        application_date = pd.to_datetime(application_date).date()
 
         # transform json column into new df
         json_obj = json.loads(json_str)
         claim_df = pd.json_normalize(json_obj)
 
-        # remove records without loans
+        # remove records with empty summa field
         claim_df = claim_df[claim_df['summa'].astype(bool)] 
 
-        #check if there are any loans
-        if(len(claim_df.index) == 0):
+        # get records with not null claim_date
+        non_empty_claim_date_df = claim_df[claim_df['claim_date'].astype(bool)] 
+
+        # check if there are any loans
+        if(len(non_empty_claim_date_df.index) == 0 or len(claim_df.index) == 0):
             return -1
         
         claim_df['contract_date'] = pd.to_datetime(claim_df['contract_date'], format='%d.%m.%Y')
@@ -98,6 +104,6 @@ def calc_day_sinlastloan(json_str):
         claim_df['day_of_week'] = claim_df['contract_date'].dt.dayofweek
 
         # set contract_date as a date of the next Monday if claim was created on Saturday or Sunday
-        claim_df['contract_date'] = claim_df.apply(lambda row: _skip_to_monday(row["contract_date"], row["day_of_week"]), axis=1)
+        claim_df['contract_date'] = claim_df.apply(lambda row: _replace_to_application_date(row["contract_date"], application_date, row["day_of_week"]), axis=1)
 
         return (current_ts - claim_df['contract_date'].max()).days
